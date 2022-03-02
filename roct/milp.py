@@ -9,7 +9,7 @@ import math
 import numpy as np
 
 from groot.adversary import DecisionTreeAdversary
-from groot.model import GrootTree, NumericalNode, Node, _TREE_LEAF, _TREE_UNDEFINED
+from groot.model import GrootTreeClassifier, NumericalNode, Node, _TREE_LEAF, _TREE_UNDEFINED
 from groot.util import convert_numpy
 
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -420,8 +420,6 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
                 feature = 0
                 threshold = 2.0
 
-            print(feature, threshold)
-
             if self.verbose:
                 print(f"Node: {t} feature: {feature}, threshold: {threshold}")
             node = NumericalNode(feature, threshold, _TREE_UNDEFINED, _TREE_UNDEFINED, _TREE_UNDEFINED)
@@ -430,7 +428,7 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
         
         # Create leaf nodes with their prediction values
         for t in T_L:
-            value = [round(1 - c[t].X), round(c[t].X)]
+            value = np.array([round(1 - c[t].X), round(c[t].X)])
             if self.verbose:
                 print(f"Leaf: {t} value: {value}")
             leaf = Node(_TREE_UNDEFINED, _TREE_LEAF, _TREE_LEAF, value)
@@ -640,7 +638,7 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
 
     def __generate_warm_start(self, X, y, tree=None):
         if tree is None:
-            tree = GrootTree(
+            tree = GrootTreeClassifier(
                 max_depth=self.max_depth,
                 attack_model=self.attack_model,
                 one_adversarial_class=False,
@@ -890,7 +888,7 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
         if model.Status == GRB.TIME_LIMIT and model.ObjVal == float('inf'):
             self.optimal_ = False
 
-            value = [1 - self.majority_class_, self.majority_class_]
+            value = np.array([1 - self.majority_class_, self.majority_class_])
             self.root_ = Node(_TREE_UNDEFINED, _TREE_LEAF, _TREE_LEAF, value)
             return
 
@@ -935,6 +933,7 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
             if value[0] is None or value[1] is None:
                 value = [0.5, 0.5]
             
+            value = np.array(value)
             leaf = Node(_TREE_UNDEFINED, _TREE_LEAF, _TREE_LEAF, value)
             nodes.append(leaf)
 

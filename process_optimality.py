@@ -21,7 +21,7 @@ import os
 
 import json
 
-optimal_dir = "out/single_results_5_7200/"
+optimal_dir = "out/single_results/"
 data_dir = "data/"
 figure_dir = "out/figures/"
 

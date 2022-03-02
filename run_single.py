@@ -1,7 +1,7 @@
 import argparse
 
 from groot.datasets import epsilon_attacker
-from groot.model import GrootTree
+from groot.model import GrootTreeClassifier
 from groot.toolbox import Model
 from groot.treant import RobustDecisionTree
 from groot.util import convert_numpy
@@ -32,7 +32,7 @@ signal.signal(signal.SIGALRM, timeout_handler)
 
 def fit_groot(depth, X, y):
     attack_model = [args.epsilon] * X.shape[1]
-    tree = GrootTree(
+    tree = GrootTreeClassifier(
         max_depth=depth, attack_model=attack_model, min_samples_split=2, random_state=1
     )
     tree.fit(X, y)
@@ -110,7 +110,7 @@ def fit_milp(depth, X, y):
 def fit_milp_warm(depth, X, y):
     attack_model = [args.epsilon] * X.shape[1]
 
-    groot_tree = GrootTree(
+    groot_tree = GrootTreeClassifier(
         max_depth=depth, attack_model=attack_model, min_samples_split=2, random_state=1
     )
     groot_tree.fit(X, y)
@@ -138,7 +138,7 @@ def fit_bin_milp(depth, X, y):
 def fit_bin_milp_warm(depth, X, y):
     attack_model = [args.epsilon] * X.shape[1]
 
-    groot_tree = GrootTree(
+    groot_tree = GrootTreeClassifier(
         max_depth=depth, attack_model=attack_model, min_samples_split=2, random_state=1
     )
     groot_tree.fit(X, y)
@@ -263,9 +263,9 @@ y_test = np.load(args.data_dir + f"y_test_{args.dataset}.npy")
 
 # First run GROOT once to get rid of the JIT compilation overhead
 if args.algorithm == "groot":
-    GrootTree(max_depth=1, attack_model=[0.1] * X_train.shape[1]).fit(X_train, y_train)
+    GrootTreeClassifier(max_depth=1, attack_model=[0.1] * X_train.shape[1]).fit(X_train, y_train)
 
-# Train a model on the best cross validation depth
+# Train a model on the given depth
 start_time = time.time()
 if args.algorithm == "groot":
     model, optimal = fit_groot(args.depth, X_train, y_train)

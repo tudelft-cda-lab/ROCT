@@ -516,7 +516,7 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
         # Create leaf nodes with their prediction values
         for t in T_L:
             prediction = float(c[t - len(T_B)] in model)
-            value = [1 - prediction, prediction]
+            value = np.array([1 - prediction, prediction])
             # print(f"Leaf: {t} value: {value}")
             leaf = Node(_TREE_UNDEFINED, _TREE_LEAF, _TREE_LEAF, value)
             nodes.append(leaf)

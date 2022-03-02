@@ -1,6 +1,6 @@
 from groot.adversary import DecisionTreeAdversary
 from groot.datasets import epsilon_attacker
-from groot.model import GrootTree
+from groot.model import GrootTreeClassifier
 from groot.treant import RobustDecisionTree
 from groot.visualization import plot_adversary
 
@@ -43,11 +43,6 @@ print("Creating dataset...")
 epsilon = 0.1
 max_depth = 2
 
-colors = {
-    0: sns.color_palette()[0],
-    1: sns.color_palette()[1],
-}
-
 X, y = create_dataset(dimensions=2)
 X = MinMaxScaler().fit_transform(X)
 
@@ -59,11 +54,11 @@ plt.savefig("out/bad_data_2d.png")
 
 print("Fitting GROOT...")
 attack_model = [epsilon] * X.shape[1]
-groot_tree = GrootTree(attack_model=attack_model, max_depth=max_depth)
+groot_tree = GrootTreeClassifier(attack_model=attack_model, max_depth=max_depth)
 groot_tree.fit(X, y)
 
-adversary = DecisionTreeAdversary(groot_tree, "groot", attack_model)
-plot_adversary(X, y, adversary, colors=colors)
+adversary = DecisionTreeAdversary(groot_tree, "groot", attack_model, [True for _ in range(X.shape[1])], [None for _ in range(X.shape[1])], one_adversarial_class=False)
+plot_adversary(X, y, adversary)
 plt.tight_layout(pad=0)
 plt.savefig("out/bad_data_2d_groot.png")
 plt.savefig("out/bad_data_2d_groot.pdf")
@@ -75,7 +70,7 @@ treant_tree = RobustDecisionTree(attacker=attacker, max_depth=max_depth, min_ins
 treant_tree.fit(X, y)
 
 adversary = DecisionTreeAdversary(treant_tree, "treant", attack_model, [True for _ in range(X.shape[1])], [None for _ in range(X.shape[1])], one_adversarial_class=False)
-plot_adversary(X, y, adversary, colors=colors)
+plot_adversary(X, y, adversary)
 plt.tight_layout(pad=0)
 plt.savefig("out/bad_data_2d_treant.png")
 plt.savefig("out/bad_data_2d_treant.pdf")
@@ -87,7 +82,7 @@ roct_tree = SATOptimalRobustTree(attack_model=attack_model, max_depth=max_depth)
 roct_tree.fit(X, y)
 
 adversary = DecisionTreeAdversary(roct_tree, "groot", attack_model, [True for _ in range(X.shape[1])], [None for _ in range(X.shape[1])], one_adversarial_class=False)
-plot_adversary(X, y, adversary, colors=colors)
+plot_adversary(X, y, adversary)
 plt.tight_layout(pad=0)
 plt.savefig("out/bad_data_2d_roct.png")
 plt.savefig("out/bad_data_2d_roct.pdf")

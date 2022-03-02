@@ -9,7 +9,7 @@ sns.set_theme(context="paper", style="whitegrid", palette="colorblind", font_sca
 from roct.milp import OptimalRobustTree, BinaryOptimalRobustTree
 from roct.maxsat import SATOptimalRobustTree
 
-from groot.model import GrootTree
+from groot.model import GrootTreeClassifier
 
 # Avoid type 3 fonts
 import matplotlib
@@ -47,8 +47,8 @@ def plot_runtimes_cost(many_runtimes, many_costs, color_index, label, only_avg=F
     
 
 depth = 3
-time_limit = 1800
-use_cached = True
+time_limit = 60
+use_cached = False
 
 data_dir = "data/"
 figure_dir = "out/figures/"
@@ -152,7 +152,7 @@ else:
         bin_milp_costs.append([1.0] + [cost / len(X_train) if cost / len(X_train) <= 1.0 else 1.0 for cost in tree.upper_bounds_])
 
         # MILP-warm
-        groot_tree = GrootTree(
+        groot_tree = GrootTreeClassifier(
             max_depth=depth, attack_model=attack_model, min_samples_split=2, random_state=1
         )
         groot_tree.fit(X_train, y_train)
