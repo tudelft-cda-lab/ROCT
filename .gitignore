@@ -13,3 +13,7 @@ out/*
 # Ignore data files except for the placeholders
 data/*
 !data/PLACEHOLDER.md
+
+# Ignore distribution files for PyPi
+dist/*
+roct.egg-info/*
