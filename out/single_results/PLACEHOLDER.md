@@ -1,0 +1,1 @@
+This directory will populate with decision trees trained using `run_single.py`. These files are then used to create plots comparing GROOT to optimal trees and optimal trees to the adversarial accuracy upper bound.

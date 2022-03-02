@@ -1,1 +1,5 @@
 */__pycache__/*
+out/*
+!out/figures/PLACEHOLDER.md
+!out/results/PLACEHOLDER.md
+!out/single_results/PLACEHOLDER.md

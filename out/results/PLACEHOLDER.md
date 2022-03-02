@@ -1,0 +1,1 @@
+This directory will populate with decision trees trained using `run.py`. These files are then used to compare the adversarial accuracy of different methods.
