@@ -1,5 +1,15 @@
+# Ignore cache, model and package files
 */__pycache__/*
+.DS_Store
+*.lp
+*venv/*
+
+# Ignore output files except for the placeholders
 out/*
 !out/figures/PLACEHOLDER.md
 !out/results/PLACEHOLDER.md
 !out/single_results/PLACEHOLDER.md
+
+# Ignore data files except for the placeholders
+data/*
+!data/PLACEHOLDER.md

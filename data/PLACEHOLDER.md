@@ -1,0 +1,1 @@
+This directory gets populated with datasets in numpy format when running the `download_datasets.py` script.
