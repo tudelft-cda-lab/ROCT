@@ -3,10 +3,13 @@
 This folder contains the scripts and code needed to reproduce the results of 'Robust Optimal Classification Trees Against Adversarial Examples'. Much of our code extends the code retrieved from 'GROOT' at https://github.com/tudelft-cda-lab/GROOT .
 
 ## Installation instructions
-The code needs a new version of python, at least 3.7. We recommend using virtual environments to install the necessary packages with pip:
+To only install the `roct` package run:
 ```
-pip install -r requirements.txt
+pip install roct
 ```
+The code needs a new version of python, at least 3.7.
+
+To also run the experiments clone the repository and install the requirements from `requirements.txt`. We recommend using virtual environments.
 
 ## Simple example
 Below is a small example for running ROCT (using MILP or MaxSAT solver) on a toy dataset using the Scikit-learn API.
