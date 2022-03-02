@@ -627,9 +627,7 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
             The predicted class labels
         """
 
-        X = check_array(X)
-
-        return np.round(self.predict_proba(X))
+        return np.argmax(self.predict_proba(X), axis=1)
 
     def to_string(self):
         result = ""
