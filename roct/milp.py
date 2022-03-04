@@ -30,9 +30,6 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
         self.record_progress = record_progress
         self.verbose = verbose
 
-        self.Delta_l, self.Delta_r = self.__parse_attack_model(attack_model)
-        self.T = (2 ** (max_depth + 1)) - 1
-
         # We say that an untrained tree is not optimal
         self.optimal_ = False
 
@@ -66,6 +63,12 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
         closely resembles that of Bertsimas and Dunn (Optimal Decision Trees).
         """
         self.n_samples_, self.n_features_ = X.shape
+
+        if self.attack_model is None:
+            self.attack_model = [0.0] * X.shape[1]
+        
+        self.Delta_l, self.Delta_r = self.__parse_attack_model(self.attack_model)
+        self.T = (2 ** (self.max_depth + 1)) - 1
 
         self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
 
@@ -548,9 +551,6 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
         self.cpus = cpus
         self.record_progress = record_progress
 
-        self.Delta_l, self.Delta_r = self.__parse_attack_model(attack_model)
-        self.T = (2 ** (max_depth + 1)) - 1
-
     def __parse_attack_model(self, attack_model):
         Delta_l = []
         Delta_r = []
@@ -582,6 +582,12 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
         """
         self.n_samples_, self.n_features_ = X.shape
         self.majority_class_ = np.argmax(np.bincount(y))
+
+        if self.attack_model is None:
+            self.attack_model = [0.0] * X.shape[1]
+        
+        self.Delta_l, self.Delta_r = self.__parse_attack_model(self.attack_model)
+        self.T = (2 ** (self.max_depth + 1)) - 1
 
         self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
         self.V = [self.__determine_V(X[:, i]) for i in range(X.shape[1])]

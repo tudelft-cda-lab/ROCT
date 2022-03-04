@@ -27,8 +27,8 @@ from pysat.examples.lsu import LSU
 from pysat.formula import WCNF, WCNFPlus
 from pysat.card import CardEnc
 
-from roct.lsu_augmented import LSUAugmented
-from roct.upper_bound import samples_in_range
+from .lsu_augmented import LSUAugmented
+from .upper_bound import samples_in_range
 
 from threading import Timer
 
@@ -51,9 +51,6 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
         self.lsu_timeout = lsu_timeout
         self.verbose = verbose
         self.random_state = random_state
-
-        self.Delta_l, self.Delta_r = self.__parse_attack_model(attack_model)
-        self.T = (2 ** (max_depth + 1)) - 1
 
         # We say that an untrained tree is not optimal
         self.optimal_ = False
@@ -88,6 +85,9 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
         """
         if self.attack_model is None:
             self.attack_model = [0.0] * X.shape[1]
+
+        self.Delta_l, self.Delta_r = self.__parse_attack_model(self.attack_model)
+        self.T = (2 ** (self.max_depth + 1)) - 1
 
         self.random_state_ = check_random_state(self.random_state)
 
