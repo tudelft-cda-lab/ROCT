@@ -334,9 +334,9 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         for i, weight in enumerate(weights):
             wcnf.append([-e[i]], weight=weight)
 
+        # Add constraints stating that close samples with different labels
+        # cannot both be classified correctly at once.
         if self.add_impossible_combinations:
-            # Add constraints stating that close samples cannot both
-            # be classified correctly at once.
             in_range = samples_in_range(X, y, self.Delta_l, self.Delta_r)
             for sample_i, other_sample_i in in_range:
                 wcnf.append([e[sample_i], e[other_sample_i]])

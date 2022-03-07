@@ -6,16 +6,18 @@ from groot.adversary import DecisionTreeAdversary
 from groot.model import GrootTreeClassifier, NumericalNode, Node, _TREE_LEAF, _TREE_UNDEFINED
 
 from .base import BaseOptimalRobustTree
+from .upper_bound import samples_in_range
 
 import gurobipy as gp
 from gurobipy import GRB
 
 class OptimalRobustTree(BaseOptimalRobustTree):
 
-    def __init__(self, attack_model=None, max_depth=3, time_limit=None, warm_start_tree=None, warm_start_kind="groot", cpus=1, record_progress=False, verbose=False):
+    def __init__(self, attack_model=None, max_depth=3, add_impossible_combinations=False, time_limit=None, warm_start_tree=None, warm_start_kind="groot", cpus=1, record_progress=False, verbose=False):
         super().__init__(
             max_depth=max_depth,
             attack_model=attack_model,
+            add_impossible_combinations=add_impossible_combinations,
             time_limit=time_limit,
             record_progress=record_progress,
             verbose=verbose,
@@ -261,6 +263,13 @@ class OptimalRobustTree(BaseOptimalRobustTree):
                 else:
                     model.addConstr(z[i, t] - c[t] <= e[i])
 
+        # Add constraints stating that close samples with different labels
+        # cannot both be classified correctly at once.
+        if self.add_impossible_combinations:
+            in_range = samples_in_range(X, y, self.Delta_l, self.Delta_r)
+            for sample_i, other_sample_i in in_range:
+                model.addConstr(e[sample_i + 1] + e[other_sample_i + 1] >= 1)
+
         tolerance = 10 ** (int(math.log10(epsilon)) - 1)
         return model, (a, z, e, s, b, c), tolerance
 
@@ -427,10 +436,11 @@ class OptimalRobustTree(BaseOptimalRobustTree):
 
 class BinaryOptimalRobustTree(BaseOptimalRobustTree):
 
-    def __init__(self, attack_model=None, max_depth=3, time_limit=None, warm_start_tree=None, verbose=False, cpus=1, record_progress=False):
+    def __init__(self, attack_model=None, max_depth=3, add_impossible_combinations=False, time_limit=None, warm_start_tree=None, verbose=False, cpus=1, record_progress=False):
         super().__init__(
             max_depth=max_depth,
             attack_model=attack_model,
+            add_impossible_combinations=add_impossible_combinations,
             time_limit=time_limit,
             record_progress=record_progress,
             verbose=verbose,
@@ -656,6 +666,13 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
                     model.addConstr(e[i] >= c[t] + gp.quicksum(s[i, m, 0] for m in A_l) + gp.quicksum(s[i, m, 1] for m in A_r) - len(A_l + A_r))
                 else:
                     model.addConstr(e[i] >= (1 - c[t]) + gp.quicksum(s[i, m, 0] for m in A_l) + gp.quicksum(s[i, m, 1] for m in A_r) - len(A_l + A_r))
+
+        # Add constraints stating that close samples with different labels
+        # cannot both be classified correctly at once.
+        if self.add_impossible_combinations:
+            in_range = samples_in_range(X, y, self.Delta_l, self.Delta_r)
+            for sample_i, other_sample_i in in_range:
+                model.addConstr(e[sample_i + 1] + e[other_sample_i + 1] >= 1)
                     
         return model, (a, b, c, e, s)
 

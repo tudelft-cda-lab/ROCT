@@ -28,12 +28,14 @@ class BaseOptimalRobustTree(BaseEstimator, ClassifierMixin):
         self,
         max_depth=3,
         attack_model=None,
+        add_impossible_combinations=False,
         time_limit=None,
         record_progress=False,
         verbose=False,
     ):
         self.max_depth = max_depth
         self.attack_model = attack_model
+        self.add_impossible_combinations = add_impossible_combinations
         self.time_limit = time_limit
         self.record_progress = record_progress
         self.verbose = verbose
