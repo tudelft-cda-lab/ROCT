@@ -413,6 +413,8 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
 
         model = set(model)
 
+        self.train_adversarial_accuracy_ = 1 - (sum(e[i] in model for i in range(n)) / n)
+
         # Create branching nodes with their feature and splitting threshold
         nodes = []
         for t in T_B:

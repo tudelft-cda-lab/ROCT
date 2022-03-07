@@ -334,6 +334,8 @@ class OptimalRobustTree(BaseOptimalRobustTree):
         else:
             model.optimize()
 
+        self.train_adversarial_accuracy_ = 1 - (sum([e[i].X for i in range(1, n + 1)]) / n)
+
         if self.verbose:
             print("Error:", sum([e[i].X for i in range(1, n + 1)]))
 
@@ -746,6 +748,8 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
             value = np.array([1 - self.majority_class_, self.majority_class_])
             self.root_ = Node(_TREE_UNDEFINED, _TREE_LEAF, _TREE_LEAF, value)
             return
+
+        self.train_adversarial_accuracy_ = 1 - (sum([e[i].X for i in range(1, n + 1)]) / n)
 
         # Create branching nodes with their feature and splitting threshold
         nodes = []
