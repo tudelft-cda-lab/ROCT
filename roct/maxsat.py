@@ -337,7 +337,6 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         n = self.n_samples_
         T_B = range(self.T // 2)
         T_L = range(self.T // 2, self.T)
-        n_thresholds = max(len(ts) for ts in self.thresholds)
 
         model = set(model)
 
@@ -350,8 +349,6 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
             feature = a_values.index(True)
 
             bs = [b[ts, t] in model for ts in range(len(self.thresholds[feature]))]
-
-            # print(f"b {t}:", bs)
 
             delta_l = self.Delta_l[feature]
             delta_r = self.Delta_r[feature]
@@ -403,7 +400,6 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         for t in T_L:
             prediction = float(c[t - len(T_B)] in model)
             value = np.array([1 - prediction, prediction])
-            # print(f"Leaf: {t} value: {value}")
             leaf = Node(_TREE_UNDEFINED, _TREE_LEAF, _TREE_LEAF, value)
             nodes.append(leaf)
 
@@ -421,8 +417,6 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         delta_r = self.Delta_r[feature]
 
         points = np.concatenate((samples - delta_l, samples + delta_r))
-        # points = np.delete(points, np.where((points > 1 - delta_l) | (points < 0 + delta_r))[0])
-        # points = np.concatenate((points, [-1]))
         points = np.unique(np.sort(points)[:-1])
 
         return points

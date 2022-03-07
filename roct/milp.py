@@ -364,7 +364,6 @@ class OptimalRobustTree(BaseOptimalRobustTree):
                 i = np.abs(candidates - b[t].X).argmin()
 
                 if math.isclose(b[t].X, candidates[i]):
-                    # threshold = candidates[i]
                     if i == len(candidates) - 1:
                         # Prevent out of bounds
                         threshold = candidates[i] + self.epsilon_
@@ -374,14 +373,12 @@ class OptimalRobustTree(BaseOptimalRobustTree):
                     if i == 0:
                         # Prevent out of bounds
                         threshold = candidates[i] - self.epsilon_
-                        # threshold = -1.0
                     else:
                         threshold = (candidates[i-1] + candidates[i]) * 0.5
                 else:
                     if i == len(candidates) - 1:
                         # Prevent out of bounds
                         threshold = candidates[i] + self.epsilon_
-                        # threshold = 2.0
                     else:
                         threshold = (candidates[i] + candidates[i + 1]) * 0.5
             else:
@@ -681,7 +678,6 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
         delta_r = self.Delta_r[feature]
 
         points = np.concatenate((samples - delta_l, samples + delta_r))
-        # points = np.delete(points, np.where((points > 1) | (points < 0))[0])
         points = np.unique(np.sort(points)[:-1])
 
         return points
