@@ -9,9 +9,29 @@ from numbers import Number
 
 import json
 
-class BaseOptimalRobustTree(BaseEstimator, ClassifierMixin):
+import warnings
 
-    def __init__(self, max_depth=3, attack_model=None, time_limit=None, record_progress=False, verbose=False):
+
+def check_features_scaled(X):
+    min_values = np.min(X, axis=0)
+    max_values = np.max(X, axis=0)
+    if np.any(min_values < 0) or np.any(max_values) > 1:
+        warnings.warn(
+            "found feature values outside of the [0, 1] range, "
+            "features should be scaled to [0, 1] or ROCT will ignore their "
+            "values for splitting."
+        )
+
+
+class BaseOptimalRobustTree(BaseEstimator, ClassifierMixin):
+    def __init__(
+        self,
+        max_depth=3,
+        attack_model=None,
+        time_limit=None,
+        record_progress=False,
+        verbose=False,
+    ):
         self.max_depth = max_depth
         self.attack_model = attack_model
         self.time_limit = time_limit
@@ -48,6 +68,8 @@ class BaseOptimalRobustTree(BaseEstimator, ClassifierMixin):
         """
         Fit the optimal robust decision tree on the given dataset.
         """
+        check_features_scaled(X)
+
         self.n_samples_, self.n_features_in_ = X.shape
 
         # If no attack model is given then train a regular decision tree
@@ -89,7 +111,7 @@ class BaseOptimalRobustTree(BaseEstimator, ClassifierMixin):
         """
         Predict the classes of the input samples X.
 
-        The predicted class is the most frequently occuring class label in a 
+        The predicted class is the most frequently occuring class label in a
         leaf.
 
         Parameters
