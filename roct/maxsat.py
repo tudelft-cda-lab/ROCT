@@ -17,17 +17,31 @@ from .upper_bound import samples_in_range
 
 from threading import Timer
 
-class SATOptimalRobustTree(BaseOptimalRobustTree):
 
-    def __init__(self, attack_model=None, max_depth=3, time_limit=None, max_features=None, lsu=False, warm_start_tree=None, warm_start_kind="groot", record_progress=False, rc2=True, add_impossible_combinations=False, verbose=False, random_state=None):
+class SATOptimalRobustTree(BaseOptimalRobustTree):
+    def __init__(
+        self,
+        attack_model=None,
+        max_depth=3,
+        time_limit=None,
+        max_features=None,
+        lsu=False,
+        warm_start_tree=None,
+        warm_start_kind="groot",
+        record_progress=False,
+        rc2=True,
+        add_impossible_combinations=False,
+        verbose=False,
+        random_state=None,
+    ):
         super().__init__(
             max_depth=max_depth,
             attack_model=attack_model,
             time_limit=time_limit,
             record_progress=record_progress,
-            verbose=verbose
+            verbose=verbose,
         )
-        
+
         self.max_features = max_features
         self.lsu = lsu
         self.warm_start_tree = warm_start_tree
@@ -45,7 +59,10 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
 
         self.n_samples_, self.n_features_in_ = X.shape
 
-        self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
+        self.thresholds = [
+            self.__determine_thresholds(samples, feature)
+            for feature, samples in enumerate(X.T)
+        ]
 
         weights = np.ones(X.shape[0], dtype=int)
         wcnf, variables = self.__build_sat_formula(X, y, weights)
@@ -83,7 +100,9 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         )
 
         for i, e_var in enumerate(e_vars):
-            correct = adversary.adversarial_accuracy(X[i].reshape(1, -1), np.array([y[i]]))
+            correct = adversary.adversarial_accuracy(
+                X[i].reshape(1, -1), np.array([y[i]])
+            )
             warm_start.append(-e_var if correct else e_var)
 
         # We need this function instead of a simple breadth first traversal
@@ -113,7 +132,7 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
             if node.is_leaf() and A[-1] not in range((self.T // 2) + 1, self.T + 1):
                 # If we found a leaf expecting a node return a dummy node
                 return None
-            
+
             if node_id == A[-1]:
                 # If the last node_id was reached we can return the node
                 return node
@@ -139,7 +158,7 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
                 repeat_t = t // 2
                 while nodes[repeat_t - 1] is None:
                     repeat_t //= 2
-                
+
                 new_node = nodes[repeat_t - 1]
 
                 if new_node.is_leaf():
@@ -159,7 +178,6 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
                     # If the node is not a leaf repeat that node's values
                     a[node.feature] = 1.0
                     b = node.threshold
-                
 
             if b < 0.0:
                 b = 0.0
@@ -168,25 +186,29 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
 
             # Negate all a SAT variables except for the chosen feature
             chosen_feature = a.index(1)
-            a_warm = -a_vars[:, t-1]
+            a_warm = -a_vars[:, t - 1]
             a_warm[chosen_feature] *= -1
             warm_start.extend(a_warm)
 
             # Turn b (threshold value) into unary encoded threshold variables
             b_index = np.searchsorted(self.thresholds[chosen_feature], b)
-            for b_var in b_vars[:b_index, t-1]:
+            for b_var in b_vars[:b_index, t - 1]:
                 warm_start.append(-b_var)
-            for b_var in b_vars[b_index:, t-1]:
+            for b_var in b_vars[b_index:, t - 1]:
                 warm_start.append(b_var)
 
             # Compute the s variables
             for i, sample in enumerate(X):
-                can_move_left = sample[chosen_feature] - self.Delta_l[chosen_feature] <= b
-                s_left_var = s_vars[i, t-1, 0]
+                can_move_left = (
+                    sample[chosen_feature] - self.Delta_l[chosen_feature] <= b
+                )
+                s_left_var = s_vars[i, t - 1, 0]
                 warm_start.append(s_left_var if can_move_left else -s_left_var)
 
-                can_move_right = sample[chosen_feature] + self.Delta_r[chosen_feature] > b
-                s_right_var = s_vars[i, t-1, 1]
+                can_move_right = (
+                    sample[chosen_feature] + self.Delta_r[chosen_feature] > b
+                )
+                s_right_var = s_vars[i, t - 1, 1]
                 warm_start.append(s_right_var if can_move_right else -s_right_var)
 
         for c_var, t in zip(c_vars, T_L):
@@ -203,11 +225,20 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
 
         # Create boolean variables
         counter = 0
-        a = np.array([[counter := counter + 1 for m in T_B] for j in range(p)]).astype(object)
-        b = np.array([[counter := counter + 1 for m in T_B] for ts in range(n_thresholds)]).astype(object)
+        a = np.array([[counter := counter + 1 for m in T_B] for j in range(p)]).astype(
+            object
+        )
+        b = np.array(
+            [[counter := counter + 1 for m in T_B] for ts in range(n_thresholds)]
+        ).astype(object)
         c = np.array([counter := counter + 1 for t in T_L]).astype(object)
         e = np.array([counter := counter + 1 for i in range(n)]).astype(object)
-        s = np.array([[[counter := counter + 1 for side in range(2)] for m in T_B] for i in range(n)]).astype(object)
+        s = np.array(
+            [
+                [[counter := counter + 1 for side in range(2)] for m in T_B]
+                for i in range(n)
+            ]
+        ).astype(object)
 
         # Only one feature may be chosen in each node
         if self.rc2:
@@ -220,17 +251,22 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         elif self.max_features == "sqrt":
             max_features_ = max(1, int(np.sqrt(self.n_features_in_)))
         else:
-            raise Exception("Can only use values None or 'sqrt' for max_features, not " + self.max_features)
+            raise Exception(
+                "Can only use values None or 'sqrt' for max_features, not "
+                + self.max_features
+            )
 
         for m in T_B:
-            available_features = self.random_state_.choice(a[:, m], max_features_, replace=False)
+            available_features = self.random_state_.choice(
+                a[:, m], max_features_, replace=False
+            )
             wcnf.append(list(available_features))
 
         # The thresholds have order b_{i} <= b_{i+1}
         for m in T_B:
             for ts in range(n_thresholds - 1):
                 wcnf.append([-b[ts, m], b[ts + 1, m]])
-        
+
         # Determine whether each sample can go left or right of each node
         for m in T_B:
             for j in range(p):
@@ -241,11 +277,15 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
                     delta_r = self.Delta_r[j]
 
                     # Determine s's on the left
-                    l = self.__leftmost_threshold_right(thresholds_feature, X[i, j], delta_l)
+                    l = self.__leftmost_threshold_right(
+                        thresholds_feature, X[i, j], delta_l
+                    )
                     wcnf.append([-a[j, m], b[l, m], s[i, m, 0]])
 
                     # Determine s's on the right
-                    l = self.__rightmost_threshold_left(thresholds_feature, X[i, j], delta_r)
+                    l = self.__rightmost_threshold_left(
+                        thresholds_feature, X[i, j], delta_r
+                    )
                     wcnf.append([-a[j, m], -b[l, m], s[i, m, 1]])
 
         # Count an error when a leaf in reach has the wrong label
@@ -281,7 +321,6 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
 
         return wcnf, (a, b, c, e, s, X, y)
 
-
     def __solve_sat(self, wcnf, warm_start):
         if self.verbose:
             print("Solving...")
@@ -290,11 +329,20 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         if warm_start is not None or self.lsu:
             if warm_start is None:
                 warm_start = []
-            with LSUAugmented(wcnf, solver="g4", ext_model=warm_start, verbose=self.verbose, record_progress=self.record_progress, expect_interrupt=True) as solver:
+            with LSUAugmented(
+                wcnf,
+                solver="g4",
+                ext_model=warm_start,
+                verbose=self.verbose,
+                record_progress=self.record_progress,
+                expect_interrupt=True,
+            ) as solver:
                 if self.time_limit:
-                    timer = Timer(self.time_limit, lambda solver: solver.interrupt(), [solver])
+                    timer = Timer(
+                        self.time_limit, lambda solver: solver.interrupt(), [solver]
+                    )
                     timer.start()
-                
+
                 success = solver.solve()
 
                 if self.time_limit:
@@ -311,14 +359,21 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
                     self.upper_bounds_ = solver.upper_bounds_
         else:
             if self.rc2:
-                with RC2Stratified(wcnf, solver="g4", incr=True, adapt=False, exhaust=True, minz=True, verbose=int(self.verbose) * 10) as solver:
+                with RC2Stratified(
+                    wcnf,
+                    solver="g4",
+                    incr=True,
+                    adapt=False,
+                    exhaust=True,
+                    minz=True,
+                    verbose=int(self.verbose) * 10,
+                ) as solver:
                     model = solver.compute()
                     self.optimal_ = model is not None
             else:
                 with FM(wcnf, solver="g4", enc=3, verbose=self.verbose) as solver:
                     solver.compute()
                     model = solver.model
-            
 
             if model is None:
                 raise Exception("Model infeasible")
@@ -329,7 +384,7 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
             print("time:", total_time)
 
         return model
-    
+
     def __build_tree(self, model, variables):
         a, b, c, e, s, X, y = variables
 
@@ -340,7 +395,9 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
 
         model = set(model)
 
-        self.train_adversarial_accuracy_ = 1 - (sum(e[i] in model for i in range(n)) / n)
+        self.train_adversarial_accuracy_ = 1 - (
+            sum(e[i] in model for i in range(n)) / n
+        )
 
         # Create branching nodes with their feature and splitting threshold
         nodes = []
@@ -356,7 +413,9 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
             split_values = []
             A_l, A_r = self.__ancestors(t + 1)
             for i in range(n):
-                if all(s[i, path_m - 1, 0] in model for path_m in A_l) and all(s[i, path_m - 1, 1] in model for path_m in A_r):
+                if all(s[i, path_m - 1, 0] in model for path_m in A_l) and all(
+                    s[i, path_m - 1, 1] in model for path_m in A_r
+                ):
                     split_values.append(X[i, feature] - delta_l)
                     split_values.append(X[i, feature] + delta_r)
 
@@ -382,8 +441,11 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
                     elif actual_right_i == len(split_values):
                         threshold = 2
                     else:
-                        threshold = (split_values[actual_right_i - 1] + split_values[actual_right_i]) * 0.5
-                    
+                        threshold = (
+                            split_values[actual_right_i - 1]
+                            + split_values[actual_right_i]
+                        ) * 0.5
+
                     if self.verbose:
                         print("Old threshold:", all_threshold_middle)
                         print("New threshold:", threshold)
@@ -393,9 +455,11 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
                 threshold = 2
 
             # print(f"Node: {t} feature: {feature}, threshold: {threshold}")
-            node = NumericalNode(feature, threshold, _TREE_UNDEFINED, _TREE_UNDEFINED, _TREE_UNDEFINED)
+            node = NumericalNode(
+                feature, threshold, _TREE_UNDEFINED, _TREE_UNDEFINED, _TREE_UNDEFINED
+            )
             nodes.append(node)
-        
+
         # Create leaf nodes with their prediction values
         for t in T_L:
             prediction = float(c[t - len(T_B)] in model)

@@ -3,7 +3,13 @@ import math
 import numpy as np
 
 from groot.adversary import DecisionTreeAdversary
-from groot.model import GrootTreeClassifier, NumericalNode, Node, _TREE_LEAF, _TREE_UNDEFINED
+from groot.model import (
+    GrootTreeClassifier,
+    NumericalNode,
+    Node,
+    _TREE_LEAF,
+    _TREE_UNDEFINED,
+)
 
 from .base import BaseOptimalRobustTree
 from .upper_bound import samples_in_range
@@ -11,9 +17,20 @@ from .upper_bound import samples_in_range
 import gurobipy as gp
 from gurobipy import GRB
 
-class OptimalRobustTree(BaseOptimalRobustTree):
 
-    def __init__(self, attack_model=None, max_depth=3, add_impossible_combinations=False, time_limit=None, warm_start_tree=None, warm_start_kind="groot", cpus=1, record_progress=False, verbose=False):
+class OptimalRobustTree(BaseOptimalRobustTree):
+    def __init__(
+        self,
+        attack_model=None,
+        max_depth=3,
+        add_impossible_combinations=False,
+        time_limit=None,
+        warm_start_tree=None,
+        warm_start_kind="groot",
+        cpus=1,
+        record_progress=False,
+        verbose=False,
+    ):
         super().__init__(
             max_depth=max_depth,
             attack_model=attack_model,
@@ -28,12 +45,15 @@ class OptimalRobustTree(BaseOptimalRobustTree):
         self.cpus = cpus
 
     def _fit_solver_specific(self, X, y):
-        self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
+        self.thresholds = [
+            self.__determine_thresholds(samples, feature)
+            for feature, samples in enumerate(X.T)
+        ]
 
         warm_start = self.__generate_warm_start(X, y, self.warm_start_tree)
 
         model, variables, tolerance = self.__build_model_gurobi(X, y)
-        
+
         self.__solve_model_gurobi(model, variables, warm_start, tolerance)
 
     def __normalize_thresholds(self, root):
@@ -67,7 +87,9 @@ class OptimalRobustTree(BaseOptimalRobustTree):
         for i in range(1, self.n_samples_ + 1):
             for t in range((self.T // 2) + 1, self.T + 1):
                 A_l, A_r = self.__ancestors(t)
-                z = all(s_warm[(i, m, 0)] for m in A_l) and all(s_warm[(i, m, 1)] for m in A_r)
+                z = all(s_warm[(i, m, 0)] for m in A_l) and all(
+                    s_warm[(i, m, 1)] for m in A_r
+                )
                 z_warm[i, t] = float(z)
         return z_warm
 
@@ -96,7 +118,10 @@ class OptimalRobustTree(BaseOptimalRobustTree):
 
         e_warm = []
         for i in range(len(y)):
-            e_warm.append(1 - adversary.adversarial_accuracy(X[i].reshape(1, -1), np.array([y[i]])))
+            e_warm.append(
+                1
+                - adversary.adversarial_accuracy(X[i].reshape(1, -1), np.array([y[i]]))
+            )
 
         # We need this function instead of a simple breadth first traversal
         # for all nodes since the GROOT tree can be pruned.
@@ -125,7 +150,7 @@ class OptimalRobustTree(BaseOptimalRobustTree):
             if node.is_leaf() and A[-1] not in range((self.T // 2) + 1, self.T + 1):
                 # If we found a leaf expecting a node return a dummy node
                 return None
-            
+
             if node_id == A[-1]:
                 # If the last node_id was reached we can return the node
                 return node
@@ -153,7 +178,7 @@ class OptimalRobustTree(BaseOptimalRobustTree):
                 repeat_t = t // 2
                 while nodes[repeat_t - 1] is None:
                     repeat_t //= 2
-                
+
                 new_node = nodes[repeat_t - 1]
 
                 if new_node.is_leaf():
@@ -173,7 +198,6 @@ class OptimalRobustTree(BaseOptimalRobustTree):
                     # If the node is not a leaf repeat that node's values
                     a[node.feature] = 1.0
                     b = node.threshold
-                
 
             if b < 0.0:
                 b = 0.0
@@ -196,11 +220,13 @@ class OptimalRobustTree(BaseOptimalRobustTree):
     def __determine_epsilon(self, X):
         best_epsilon = 1.0
         for feature in range(self.n_features_in_):
-            values = np.concatenate((
-                X[:, feature],
-                X[:, feature] - self.Delta_l[feature],
-                X[:, feature] + self.Delta_r[feature],
-            ))
+            values = np.concatenate(
+                (
+                    X[:, feature],
+                    X[:, feature] - self.Delta_l[feature],
+                    X[:, feature] + self.Delta_r[feature],
+                )
+            )
             values = np.sort(values)
             differences = np.diff(values)
 
@@ -215,7 +241,7 @@ class OptimalRobustTree(BaseOptimalRobustTree):
         if best_epsilon < 1e-08:
             best_epsilon = 1e-08
         if self.verbose:
-            print('epsilon:', best_epsilon)
+            print("epsilon:", best_epsilon)
         return best_epsilon
 
     def __build_model_gurobi(self, X, y):
@@ -229,7 +255,9 @@ class OptimalRobustTree(BaseOptimalRobustTree):
         model = gp.Model("Optimal_Robust_Tree_Fitting")
 
         a = model.addVars(range(1, p + 1), T_B, vtype=GRB.BINARY, name="a")
-        z = model.addVars(range(1, n + 1), T_L, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="z")
+        z = model.addVars(
+            range(1, n + 1), T_L, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="z"
+        )
         s = model.addVars(range(1, n + 1), T_B, range(2), vtype=GRB.BINARY, name="s")
         b = model.addVars(T_B, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="b")
         c = model.addVars(T_L, vtype=GRB.BINARY, name="c")
@@ -247,14 +275,28 @@ class OptimalRobustTree(BaseOptimalRobustTree):
         M_left = M_right = 2 + epsilon
         for i in range(1, n + 1):
             for m in T_B:
-                model.addConstr(gp.quicksum(a[j, m] * X[i-1, j-1] for j in range(1, p + 1)) - gp.quicksum(a[j, m] * Delta_l[j-1] for j in range(1, p + 1)) >= epsilon + b[m] - M_left * s[i, m, 0])
-                model.addConstr(gp.quicksum(a[j, m] * X[i-1, j-1] for j in range(1, p + 1)) + gp.quicksum(a[j, m] * Delta_r[j-1] for j in range(1, p + 1)) <= b[m] + M_right * s[i, m, 1])
+                model.addConstr(
+                    gp.quicksum(a[j, m] * X[i - 1, j - 1] for j in range(1, p + 1))
+                    - gp.quicksum(a[j, m] * Delta_l[j - 1] for j in range(1, p + 1))
+                    >= epsilon + b[m] - M_left * s[i, m, 0]
+                )
+                model.addConstr(
+                    gp.quicksum(a[j, m] * X[i - 1, j - 1] for j in range(1, p + 1))
+                    + gp.quicksum(a[j, m] * Delta_r[j - 1] for j in range(1, p + 1))
+                    <= b[m] + M_right * s[i, m, 1]
+                )
 
         for i in range(1, n + 1):
             for t in T_L:
                 A_l, A_r = self.__ancestors(t)
 
-                model.addConstr(gp.quicksum(s[i, m, 0] for m in A_l) + gp.quicksum(s[i, m, 1] for m in A_r) - len(A_l + A_r) + 1 <= z[i, t])
+                model.addConstr(
+                    gp.quicksum(s[i, m, 0] for m in A_l)
+                    + gp.quicksum(s[i, m, 1] for m in A_r)
+                    - len(A_l + A_r)
+                    + 1
+                    <= z[i, t]
+                )
 
         for i in range(1, n + 1):
             for t in T_L:
@@ -286,7 +328,9 @@ class OptimalRobustTree(BaseOptimalRobustTree):
 
             for j in range(1, p + 1):
                 for t in T_B:
-                    a[j, t].start = a_warm[t - 1][j - 1]  # a_warm's indices are reversed
+                    a[j, t].start = a_warm[t - 1][
+                        j - 1
+                    ]  # a_warm's indices are reversed
 
             for t in T_B:
                 b[t].start = b_warm[t - 1]
@@ -301,27 +345,27 @@ class OptimalRobustTree(BaseOptimalRobustTree):
             for key in s_warm:
                 i, t, side = key
                 s[i, t, side].start = s_warm[key]
-            
+
             for key in z_warm:
                 i, t = key
                 z[i, t].start = z_warm[key]
 
-        model.write('model.lp')
+        model.write("model.lp")
 
         output_flag = 1 if self.verbose else 0
         options = [
             ("OutputFlag", output_flag),
-            ('IntFeasTol', tolerance),
-            ('MIPGap', tolerance),
-            ('Presolve', 2),
-            ('MIPFocus', 1),
-            ('Cuts', 2),
-            ('Method', 0),
+            ("IntFeasTol", tolerance),
+            ("MIPGap", tolerance),
+            ("Presolve", 2),
+            ("MIPFocus", 1),
+            ("Cuts", 2),
+            ("Method", 0),
         ]
         if self.time_limit:
-            options.append(('TimeLimit', self.time_limit))
+            options.append(("TimeLimit", self.time_limit))
         if self.cpus:
-            options.append(('Threads', self.cpus))
+            options.append(("Threads", self.cpus))
 
         for option in options:
             model.setParam(*option)
@@ -343,7 +387,9 @@ class OptimalRobustTree(BaseOptimalRobustTree):
         else:
             model.optimize()
 
-        self.train_adversarial_accuracy_ = 1 - (sum([e[i].X for i in range(1, n + 1)]) / n)
+        self.train_adversarial_accuracy_ = 1 - (
+            sum([e[i].X for i in range(1, n + 1)]) / n
+        )
 
         if self.verbose:
             print("Error:", sum([e[i].X for i in range(1, n + 1)]))
@@ -374,7 +420,7 @@ class OptimalRobustTree(BaseOptimalRobustTree):
                         # Prevent out of bounds
                         threshold = candidates[i] - self.epsilon_
                     else:
-                        threshold = (candidates[i-1] + candidates[i]) * 0.5
+                        threshold = (candidates[i - 1] + candidates[i]) * 0.5
                 else:
                     if i == len(candidates) - 1:
                         # Prevent out of bounds
@@ -389,10 +435,11 @@ class OptimalRobustTree(BaseOptimalRobustTree):
 
             if self.verbose:
                 print(f"Node: {t} feature: {feature}, threshold: {threshold}")
-            node = NumericalNode(feature, threshold, _TREE_UNDEFINED, _TREE_UNDEFINED, _TREE_UNDEFINED)
+            node = NumericalNode(
+                feature, threshold, _TREE_UNDEFINED, _TREE_UNDEFINED, _TREE_UNDEFINED
+            )
             nodes.append(node)
 
-        
         # Create leaf nodes with their prediction values
         for t in T_L:
             value = np.array([round(1 - c[t].X), round(c[t].X)])
@@ -432,8 +479,17 @@ class OptimalRobustTree(BaseOptimalRobustTree):
 
 
 class BinaryOptimalRobustTree(BaseOptimalRobustTree):
-
-    def __init__(self, attack_model=None, max_depth=3, add_impossible_combinations=False, time_limit=None, warm_start_tree=None, verbose=False, cpus=1, record_progress=False):
+    def __init__(
+        self,
+        attack_model=None,
+        max_depth=3,
+        add_impossible_combinations=False,
+        time_limit=None,
+        warm_start_tree=None,
+        verbose=False,
+        cpus=1,
+        record_progress=False,
+    ):
         super().__init__(
             max_depth=max_depth,
             attack_model=attack_model,
@@ -448,8 +504,11 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
 
     def _fit_solver_specific(self, X, y):
         self.majority_class_ = np.argmax(np.bincount(y))
-        
-        self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
+
+        self.thresholds = [
+            self.__determine_thresholds(samples, feature)
+            for feature, samples in enumerate(X.T)
+        ]
         self.V = [self.__determine_V(X[:, i]) for i in range(X.shape[1])]
 
         if self.warm_start_tree:
@@ -495,7 +554,7 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
                     left_index -= 1
                 if right_index == len(b):
                     right_index -= 1
-                
+
                 s_warm[(i + 1, t + 1, 0)] = float(b[left_index] == 0)
                 s_warm[(i + 1, t + 1, 1)] = float(b[right_index] == 1)
         return s_warm
@@ -519,12 +578,15 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
             self.attack_model,
             [True for _ in range(self.n_features_in_)],
             [True for _ in range(self.n_features_in_)],
-            False
+            False,
         )
 
         e_warm = []
         for i in range(len(y)):
-            e_warm.append(1 - adversary.adversarial_accuracy(X[i].reshape(1, -1), np.array([y[i]])))
+            e_warm.append(
+                1
+                - adversary.adversarial_accuracy(X[i].reshape(1, -1), np.array([y[i]]))
+            )
 
         # We need this function instead of a simple breadth first traversal
         # for all nodes since the GROOT tree can be pruned.
@@ -553,7 +615,7 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
             if node.is_leaf() and A[-1] not in range((self.T // 2) + 1, self.T + 1):
                 # If we found a leaf expecting a node return a dummy node
                 return None
-            
+
             if node_id == A[-1]:
                 # If the last node_id was reached we can return the node
                 return node
@@ -620,10 +682,14 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
         model = gp.Model("Optimal_Robust_Tree_Fitting")
 
         a = model.addVars(range(1, p + 1), T_B, vtype=GRB.BINARY, name="a")
-        b = model.addVars(range(1, n_thresholds + 1), T_B, lb=0, ub=1, vtype=GRB.BINARY, name="b")
+        b = model.addVars(
+            range(1, n_thresholds + 1), T_B, lb=0, ub=1, vtype=GRB.BINARY, name="b"
+        )
         c = model.addVars(T_L, vtype=GRB.BINARY, name="c")
         e = model.addVars(range(1, n + 1), lb=0, ub=1, vtype=GRB.CONTINUOUS, name="e")
-        s = model.addVars(range(1, n + 1), T_B, range(2), vtype=GRB.CONTINUOUS, name="s")
+        s = model.addVars(
+            range(1, n + 1), T_B, range(2), vtype=GRB.CONTINUOUS, name="s"
+        )
 
         # The objective is to minimize the sum of errors (weighted by 1 each)
         model.setObjective(e.sum(), GRB.MINIMIZE)
@@ -636,7 +702,7 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
         for m in T_B:
             for ts in range(1, n_thresholds):
                 model.addConstr(b[ts, m] <= b[ts + 1, m])
-        
+
         # Determine whether each sample can go left or right of each node
         for m in T_B:
             for j in range(1, p + 1):
@@ -647,11 +713,15 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
                     delta_r = self.Delta_r[j - 1]
 
                     # Determine s's on the left
-                    l = self.__leftmost_threshold_right(thresholds_feature, X[i-1, j-1], delta_l)
+                    l = self.__leftmost_threshold_right(
+                        thresholds_feature, X[i - 1, j - 1], delta_l
+                    )
                     model.addConstr(s[i, m, 0] >= a[j, m] + (1 - b[l, m]) - 1)
 
                     # Determine s's on the right
-                    l = self.__rightmost_threshold_left(thresholds_feature, X[i-1, j-1], delta_r)
+                    l = self.__rightmost_threshold_left(
+                        thresholds_feature, X[i - 1, j - 1], delta_r
+                    )
                     model.addConstr(s[i, m, 1] >= a[j, m] + b[l, m] - 1)
 
         # Count an error when a leaf in reach has the wrong label
@@ -660,9 +730,21 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
                 A_l, A_r = self.__ancestors(t)
 
                 if y[i - 1] == 0:
-                    model.addConstr(e[i] >= c[t] + gp.quicksum(s[i, m, 0] for m in A_l) + gp.quicksum(s[i, m, 1] for m in A_r) - len(A_l + A_r))
+                    model.addConstr(
+                        e[i]
+                        >= c[t]
+                        + gp.quicksum(s[i, m, 0] for m in A_l)
+                        + gp.quicksum(s[i, m, 1] for m in A_r)
+                        - len(A_l + A_r)
+                    )
                 else:
-                    model.addConstr(e[i] >= (1 - c[t]) + gp.quicksum(s[i, m, 0] for m in A_l) + gp.quicksum(s[i, m, 1] for m in A_r) - len(A_l + A_r))
+                    model.addConstr(
+                        e[i]
+                        >= (1 - c[t])
+                        + gp.quicksum(s[i, m, 0] for m in A_l)
+                        + gp.quicksum(s[i, m, 1] for m in A_r)
+                        - len(A_l + A_r)
+                    )
 
         # Add constraints stating that close samples with different labels
         # cannot both be classified correctly at once.
@@ -670,7 +752,7 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
             in_range = samples_in_range(X, y, self.Delta_l, self.Delta_r)
             for sample_i, other_sample_i in in_range:
                 model.addConstr(e[sample_i + 1] + e[other_sample_i + 1] >= 1)
-                    
+
         return model, (a, b, c, e, s)
 
     def __determine_thresholds(self, samples, feature):
@@ -705,7 +787,9 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
 
             for j in range(1, p + 1):
                 for t in T_B:
-                    a[j, t].start = a_warm[t - 1][j - 1]  # a_warm's indices are reversed
+                    a[j, t].start = a_warm[t - 1][
+                        j - 1
+                    ]  # a_warm's indices are reversed
 
             for t in T_B:
                 for ts in range(1, n_thresholds + 1):
@@ -724,15 +808,15 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
         output_flag = 1 if self.verbose else 0
         options = [
             ("OutputFlag", output_flag),
-            ('Presolve', 2),
-            ('MIPFocus', 1),
-            ('Cuts', 2),
-            ('Method', 0),
+            ("Presolve", 2),
+            ("MIPFocus", 1),
+            ("Cuts", 2),
+            ("Method", 0),
         ]
         if self.time_limit:
-            options.append(('TimeLimit', self.time_limit))
+            options.append(("TimeLimit", self.time_limit))
         if self.cpus:
-            options.append(('Threads', self.cpus))
+            options.append(("Threads", self.cpus))
 
         for option in options:
             model.setParam(*option)
@@ -755,14 +839,16 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
             model.optimize()
 
         # Create just a leaf if no solution was found
-        if model.Status == GRB.TIME_LIMIT and model.ObjVal == float('inf'):
+        if model.Status == GRB.TIME_LIMIT and model.ObjVal == float("inf"):
             self.optimal_ = False
 
             value = np.array([1 - self.majority_class_, self.majority_class_])
             self.root_ = Node(_TREE_UNDEFINED, _TREE_LEAF, _TREE_LEAF, value)
             return
 
-        self.train_adversarial_accuracy_ = 1 - (sum([e[i].X for i in range(1, n + 1)]) / n)
+        self.train_adversarial_accuracy_ = 1 - (
+            sum([e[i].X for i in range(1, n + 1)]) / n
+        )
 
         # Create branching nodes with their feature and splitting threshold
         nodes = []
@@ -791,10 +877,11 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
 
             if self.verbose:
                 print(f"Node: {t} feature: {feature}, threshold: {threshold}")
-            node = NumericalNode(feature, threshold, _TREE_UNDEFINED, _TREE_UNDEFINED, _TREE_UNDEFINED)
+            node = NumericalNode(
+                feature, threshold, _TREE_UNDEFINED, _TREE_UNDEFINED, _TREE_UNDEFINED
+            )
             nodes.append(node)
 
-        
         # Create leaf nodes with their prediction values
         for t in T_L:
             value = [1 - c[t].X, c[t].X]
@@ -804,7 +891,7 @@ class BinaryOptimalRobustTree(BaseOptimalRobustTree):
 
             if value[0] is None or value[1] is None:
                 value = [0.5, 0.5]
-            
+
             value = np.array(value)
             leaf = Node(_TREE_UNDEFINED, _TREE_LEAF, _TREE_LEAF, value)
             nodes.append(leaf)

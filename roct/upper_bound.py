@@ -4,6 +4,7 @@ from scipy.spatial.distance import pdist
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import maximum_bipartite_matching
 
+
 def samples_in_range(X, y, Delta_l, Delta_r):
     """
     Returns a list of tuples (i, j) where sample i (of class 0) is in
@@ -21,21 +22,27 @@ def samples_in_range(X, y, Delta_l, Delta_r):
                 continue
 
             other_sample = X[j]
-            if np.all((other_sample + Delta_r > sample_l) & (other_sample - Delta_l <= sample_r)):
+            if np.all(
+                (other_sample + Delta_r > sample_l)
+                & (other_sample - Delta_l <= sample_r)
+            ):
                 if label == 0:
                     in_range.append((i, j))
                 else:
                     in_range.append((j, i))
     return in_range
 
+
 def samples_in_range_linf(X, y, epsilon):
     """
     Returns a list of tuples (i, j) where sample i (of class 0) is in
     range of sample j (of class 1). Only applicable for L-inf norm.
     """
-    distances = pdist(X, 'chebyshev')
+    distances = pdist(X, "chebyshev")
     n_samples = len(X)
-    reachable_distance = 2 * epsilon  # Two moving samples can reach the same point in space if they are within 2 * epsilon
+    reachable_distance = (
+        2 * epsilon
+    )  # Two moving samples can reach the same point in space if they are within 2 * epsilon
 
     in_range = []
     for i, label in enumerate(y):
@@ -43,12 +50,16 @@ def samples_in_range_linf(X, y, epsilon):
             if label == y[j]:
                 continue
 
-            if distances[n_samples * i + j - ((i + 2) * (i + 1)) // 2] <= reachable_distance:
+            if (
+                distances[n_samples * i + j - ((i + 2) * (i + 1)) // 2]
+                <= reachable_distance
+            ):
                 if label == 0:
                     in_range.append((i, j))
                 else:
                     in_range.append((j, i))
     return in_range
+
 
 def maximum_adversarial_accuracy(X, y, Delta_l, Delta_r):
     i_0 = np.where(y == 0)[0]
@@ -62,7 +73,7 @@ def maximum_adversarial_accuracy(X, y, Delta_l, Delta_r):
         in_range = np.array(samples_in_range_linf(X, y, Delta_l[0]))
     else:
         in_range = np.array(samples_in_range(X, y, Delta_l, Delta_r))
-    
+
     if len(in_range) == 0:
         return 1.0
 
