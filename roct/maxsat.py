@@ -641,12 +641,14 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
         return result
 
     def prune(self):
+        bounds = np.tile(np.array([0, 1], dtype=np.float32), (self.n_features_, 1))
+
         for _ in range(self.max_depth):
             # Without decision nodes we do not have to prune
             if self.root_.is_leaf():
                 break
 
-            self.root_ = self.root_.prune()
+            self.root_ = self.root_.prune(bounds)
 
     def to_xgboost_json(self, output_file="tree.json"):
         if hasattr(self, "root_"):

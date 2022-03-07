@@ -537,7 +537,14 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
                 json.dump([dictionary], fp, indent=2, default=convert_numpy)
 
     def prune(self):
-        self.root_ = self.root_.prune()
+        bounds = np.tile(np.array([0, 1], dtype=np.float32), (self.n_features_, 1))
+
+        for _ in range(self.max_depth):
+            # Without decision nodes we do not have to prune
+            if self.root_.is_leaf():
+                break
+
+            self.root_ = self.root_.prune(bounds)
 
 
 class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
@@ -960,6 +967,16 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
                 A_r.append(t // 2)
             t //= 2
         return A_l, A_r
+
+    def prune(self):
+        bounds = np.tile(np.array([0, 1], dtype=np.float32), (self.n_features_, 1))
+
+        for _ in range(self.max_depth):
+            # Without decision nodes we do not have to prune
+            if self.root_.is_leaf():
+                break
+
+            self.root_ = self.root_.prune(bounds)
 
     def predict_proba(self, X):
         """
