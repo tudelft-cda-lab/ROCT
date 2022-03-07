@@ -1,94 +1,50 @@
-from numbers import Number
-
-from collections import defaultdict
-
-import math
-
-import json
-
 import time
 
 import numpy as np
 
 from groot.model import NumericalNode, Node, _TREE_LEAF, _TREE_UNDEFINED
 from groot.adversary import DecisionTreeAdversary
-from groot.util import convert_numpy
 
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.utils import check_random_state, check_array
+from sklearn.utils import check_random_state
 from sklearn.model_selection import train_test_split
 
-import gurobipy as gp
-from gurobipy import GRB
-
-from pysat.examples.rc2 import RC2, RC2Stratified
+from pysat.examples.rc2 import RC2Stratified
 from pysat.examples.fm import FM
-from pysat.examples.lsu import LSU
 from pysat.formula import WCNF, WCNFPlus
-from pysat.card import CardEnc
 
+from .base import BaseOptimalRobustTree
 from .lsu_augmented import LSUAugmented
 from .upper_bound import samples_in_range
 
 from threading import Timer
 
-class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
+class SATOptimalRobustTree(BaseOptimalRobustTree):
 
-    def __init__(self, attack_model=None, max_depth=3, max_features=None, lsu=False, warm_start_tree=None, warm_start_kind="groot", cpus=None, record_progress=False, cardinality=False, pruning=False, restrict_thresholds=False, rc2=True, add_impossible_combinations=False, lsu_timeout=None, verbose=False, random_state=None):
-        self.attack_model = attack_model
-        self.max_depth = max_depth
+    def __init__(self, attack_model=None, max_depth=3, max_features=None, lsu=False, warm_start_tree=None, warm_start_kind="groot", record_progress=False, cardinality=False, pruning=False, restrict_thresholds=False, rc2=True, add_impossible_combinations=False, lsu_timeout=None, verbose=False, random_state=None):
+        super().__init__(
+            max_depth=max_depth,
+            attack_model=attack_model,
+            time_limit=None,
+            record_progress=record_progress,
+            verbose=verbose
+        )
+        
         self.max_features = max_features
         self.lsu = lsu
         self.warm_start_tree = warm_start_tree
         self.warm_start_kind = warm_start_kind
-        self.cpus = cpus
         self.record_progress = record_progress
         self.cardinality = cardinality
         self.pruning = pruning
         self.restrict_thresholds = restrict_thresholds
         self.rc2 = rc2
         self.add_impossible_combinations = add_impossible_combinations
-        self.lsu_timeout = lsu_timeout
-        self.verbose = verbose
         self.random_state = random_state
 
-        # We say that an untrained tree is not optimal
-        self.optimal_ = False
-
-    def __parse_attack_model(self, attack_model):
-        Delta_l = []
-        Delta_r = []
-        for attack in attack_model:
-            if isinstance(attack, Number):
-                Delta_l.append(attack)
-                Delta_r.append(attack)
-            elif isinstance(attack, tuple):
-                Delta_l.append(attack[0])
-                Delta_r.append(attack[1])
-            elif attack == "":
-                Delta_l.append(0)
-                Delta_r.append(0)
-            elif attack == ">":
-                Delta_l.append(0)
-                Delta_r.append(1)
-            elif attack == "<":
-                Delta_l.append(1)
-                Delta_r.append(0)
-            elif attack == "<>":
-                Delta_l.append(1)
-                Delta_r.append(1)
-        return Delta_l, Delta_r
-
-    def fit(self, X, y):
+    def _fit_solver_specific(self, X, y):
         """
         Fit optimal robust decision tree using a SAT solver.
         """
-        if self.attack_model is None:
-            self.attack_model = [0.0] * X.shape[1]
-
-        self.Delta_l, self.Delta_r = self.__parse_attack_model(self.attack_model)
-        self.T = (2 ** (self.max_depth + 1)) - 1
-
         self.random_state_ = check_random_state(self.random_state)
 
         if self.pruning:
@@ -103,7 +59,7 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
             if self.pruning:
                 prune_weights = np.ones(X_prune.shape[0], dtype=int)
 
-        self.n_samples_, self.n_features_ = X.shape
+        self.n_samples_, self.n_features_in_ = X.shape
 
         self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
 
@@ -139,8 +95,8 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
             tree,
             self.warm_start_kind,
             self.attack_model,
-            [True for _ in range(self.n_features_)],
-            [None for _ in range(self.n_features_)],
+            [True for _ in range(self.n_features_in_)],
+            [None for _ in range(self.n_features_in_)],
             False,
         )
 
@@ -193,7 +149,7 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
         T_L = range((self.T // 2) + 1, self.T + 1)
 
         for t in T_B:
-            a = [0.0 for _ in range(self.n_features_)]
+            a = [0.0 for _ in range(self.n_features_in_)]
 
             node = nodes[t - 1]
             if node is None:
@@ -293,9 +249,9 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
                 wcnf = WCNFPlus()
 
             if self.max_features is None:
-                max_features_ = self.n_features_
+                max_features_ = self.n_features_in_
             elif self.max_features == "sqrt":
-                max_features_ = max(1, int(np.sqrt(self.n_features_)))
+                max_features_ = max(1, int(np.sqrt(self.n_features_in_)))
             else:
                 raise Exception("Can only use values None or 'sqrt' for max_features, not " + self.max_features)
 
@@ -397,13 +353,13 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
             if warm_start is None:
                 warm_start = []
             with LSUAugmented(wcnf, solver="g4", ext_model=warm_start, verbose=self.verbose, record_progress=self.record_progress, expect_interrupt=True) as solver:
-                if self.lsu_timeout:
-                    timer = Timer(self.lsu_timeout, lambda solver: solver.interrupt(), [solver])
+                if self.time_limit:
+                    timer = Timer(self.time_limit, lambda solver: solver.interrupt(), [solver])
                     timer.start()
                 
                 success = solver.solve()
 
-                if self.lsu_timeout:
+                if self.time_limit:
                     timer.cancel()
 
                 if not success:
@@ -449,7 +405,7 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
     def __build_tree(self, model, variables):
         a, b, c, e, s, X, y = variables
 
-        p = self.n_features_
+        p = self.n_features_in_
         n = self.n_samples_
         T_B = range(self.T // 2)
         T_L = range(self.T // 2, self.T)
@@ -533,7 +489,7 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
     def __prune_model(self, model, X_prune, y_prune, prune_weights, variables):
         a, b, c, e, s, X, y = variables
 
-        p = self.n_features_
+        p = self.n_features_in_
         T_B = range(self.T // 2)
 
         wcnf, prune_variables = self.__build_sat_formula(X_prune, y_prune, prune_weights)
@@ -582,83 +538,3 @@ class SATOptimalRobustTree(BaseEstimator, ClassifierMixin):
                 A_r.append(t // 2)
             t //= 2
         return A_l, A_r
-
-    def predict_proba(self, X):
-        """
-        Predict class probabilities of the input samples X.
-
-        The class probability is the fraction of samples of the same class in
-        the leaf.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            The input samples to predict.
-
-        Returns
-        -------
-        proba : array of shape (n_samples,)
-            The probability for each input sample of being malicious.
-        """
-
-        X = check_array(X)
-
-        predictions = []
-        for sample in X:
-            predictions.append(self.root_.predict(sample))
-
-        return np.array(predictions)
-
-    def predict(self, X):
-        """
-        Predict the classes of the input samples X.
-
-        The predicted class is the most frequently occuring class label in a 
-        leaf.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            The input samples to predict.
-
-        Returns
-        -------
-        y : array-like of shape (n_samples,)
-            The predicted class labels
-        """
-
-        return np.argmax(self.predict_proba(X), axis=1)
-
-    def to_string(self):
-        result = ""
-        result += f"Parameters: {self.get_params()}\n"
-
-        if hasattr(self, "root_"):
-            result += f"Tree:\n{self.root_.pretty_print()}"
-        else:
-            result += "Tree has not yet been fitted"
-
-        return result
-
-    def prune(self):
-        bounds = np.tile(np.array([0, 1], dtype=np.float32), (self.n_features_, 1))
-
-        for _ in range(self.max_depth):
-            # Without decision nodes we do not have to prune
-            if self.root_.is_leaf():
-                break
-
-            self.root_ = self.root_.prune(bounds)
-
-    def to_xgboost_json(self, output_file="tree.json"):
-        if hasattr(self, "root_"):
-            dictionary, _ = self.root_.to_xgboost_json(0, 0)
-        else:
-            raise Exception("Tree is not yet fitted")
-
-        if output_file is None:
-            return dictionary
-        else:
-            with open(output_file, "w") as fp:
-                # If saving to file then surround dict in list brackets
-                json.dump([dictionary], fp, indent=2, default=convert_numpy)

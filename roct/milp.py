@@ -1,75 +1,31 @@
-from numpy.core.fromnumeric import var
-
-import json
-
-from numbers import Number
-
 import math
 
 import numpy as np
 
 from groot.adversary import DecisionTreeAdversary
 from groot.model import GrootTreeClassifier, NumericalNode, Node, _TREE_LEAF, _TREE_UNDEFINED
-from groot.util import convert_numpy
 
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.utils import check_array
+from .base import BaseOptimalRobustTree
 
 import gurobipy as gp
 from gurobipy import GRB
 
-class OptimalRobustTree(BaseEstimator, ClassifierMixin):
+class OptimalRobustTree(BaseOptimalRobustTree):
 
     def __init__(self, attack_model=None, max_depth=3, time_limit=None, warm_start_tree=None, warm_start_kind="groot", cpus=1, record_progress=False, verbose=False):
-        self.attack_model = attack_model
-        self.max_depth = max_depth
-        self.time_limit = time_limit
+        super().__init__(
+            max_depth=max_depth,
+            attack_model=attack_model,
+            time_limit=time_limit,
+            record_progress=record_progress,
+            verbose=verbose,
+        )
+
         self.warm_start_tree = warm_start_tree
         self.warm_start_kind = warm_start_kind
         self.cpus = cpus
-        self.record_progress = record_progress
-        self.verbose = verbose
 
-        # We say that an untrained tree is not optimal
-        self.optimal_ = False
-
-    def __parse_attack_model(self, attack_model):
-        Delta_l = []
-        Delta_r = []
-        for attack in attack_model:
-            if isinstance(attack, Number):
-                Delta_l.append(attack)
-                Delta_r.append(attack)
-            elif isinstance(attack, tuple):
-                Delta_l.append(attack[0])
-                Delta_r.append(attack[1])
-            elif attack == "":
-                Delta_l.append(0)
-                Delta_r.append(0)
-            elif attack == ">":
-                Delta_l.append(0)
-                Delta_r.append(1)
-            elif attack == "<":
-                Delta_l.append(1)
-                Delta_r.append(0)
-            elif attack == "<>":
-                Delta_l.append(1)
-                Delta_r.append(1)
-        return Delta_l, Delta_r
-
-    def fit(self, X, y):
-        """
-        Fit optimal robust decision tree using a MILP solver. MILP formulation
-        closely resembles that of Bertsimas and Dunn (Optimal Decision Trees).
-        """
-        self.n_samples_, self.n_features_ = X.shape
-
-        if self.attack_model is None:
-            self.attack_model = [0.0] * X.shape[1]
-        
-        self.Delta_l, self.Delta_r = self.__parse_attack_model(self.attack_model)
-        self.T = (2 ** (self.max_depth + 1)) - 1
-
+    def _fit_solver_specific(self, X, y):
         self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
 
         warm_start = self.__generate_warm_start(X, y, self.warm_start_tree)
@@ -131,8 +87,8 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
             tree,
             self.warm_start_kind,
             self.attack_model,
-            [True for _ in range(self.n_features_)],
-            [None for _ in range(self.n_features_)],
+            [True for _ in range(self.n_features_in_)],
+            [None for _ in range(self.n_features_in_)],
             False,
         )
 
@@ -187,7 +143,7 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
         a_warm = []
         b_warm = []
         for t in T_B:
-            a = [0.0 for _ in range(self.n_features_)]
+            a = [0.0 for _ in range(self.n_features_in_)]
 
             node = nodes[t - 1]
             if node is None:
@@ -237,7 +193,7 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
 
     def __determine_epsilon(self, X):
         best_epsilon = 1.0
-        for feature in range(self.n_features_):
+        for feature in range(self.n_features_in_):
             values = np.concatenate((
                 X[:, feature],
                 X[:, feature] - self.Delta_l[feature],
@@ -261,7 +217,7 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
         return best_epsilon
 
     def __build_model_gurobi(self, X, y):
-        p = self.n_features_
+        p = self.n_features_in_
         n = self.n_samples_
         T_B = range(1, (self.T // 2) + 1)
         T_L = range((self.T // 2) + 1, self.T + 1)
@@ -311,7 +267,7 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
     def __solve_model_gurobi(self, model, variables, warm_start, tolerance):
         a, z, e, s, b, c = variables
 
-        p = self.n_features_
+        p = self.n_features_in_
         n = self.n_samples_
         T_B = range(1, (self.T // 2) + 1)
         T_L = range((self.T // 2) + 1, self.T + 1)
@@ -466,136 +422,24 @@ class OptimalRobustTree(BaseEstimator, ClassifierMixin):
             t //= 2
         return A_l, A_r
 
-    def predict_proba(self, X):
-        """
-        Predict class probabilities of the input samples X.
 
-        The class probability is the fraction of samples of the same class in
-        the leaf.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            The input samples to predict.
-
-        Returns
-        -------
-        proba : array of shape (n_samples,)
-            The probability for each input sample of being malicious.
-        """
-
-        X = check_array(X)
-
-        predictions = []
-        for sample in X:
-            predictions.append(self.root_.predict(sample))
-
-        return np.array(predictions)
-
-    def predict(self, X):
-        """
-        Predict the classes of the input samples X.
-
-        The predicted class is the most frequently occuring class label in a 
-        leaf.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            The input samples to predict.
-
-        Returns
-        -------
-        y : array-like of shape (n_samples,)
-            The predicted class labels
-        """
-
-        return np.argmax(self.predict_proba(X), axis=1)
-
-    def to_string(self):
-        result = ""
-        result += f"Parameters: {self.get_params()}\n"
-
-        if hasattr(self, "root_"):
-            result += f"Tree:\n{self.root_.pretty_print()}"
-        else:
-            result += "Tree has not yet been fitted"
-
-        return result
-
-    def to_xgboost_json(self, output_file="tree.json"):
-        if hasattr(self, "root_"):
-            dictionary, _ = self.root_.to_xgboost_json(0, 0)
-        else:
-            raise Exception("Tree is not yet fitted")
-
-        if output_file is None:
-            return dictionary
-        else:
-            with open(output_file, "w") as fp:
-                # If saving to file then surround dict in list brackets
-                json.dump([dictionary], fp, indent=2, default=convert_numpy)
-
-    def prune(self):
-        bounds = np.tile(np.array([0, 1], dtype=np.float32), (self.n_features_, 1))
-
-        for _ in range(self.max_depth):
-            # Without decision nodes we do not have to prune
-            if self.root_.is_leaf():
-                break
-
-            self.root_ = self.root_.prune(bounds)
-
-
-class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
+class BinaryOptimalRobustTree(BaseOptimalRobustTree):
 
     def __init__(self, attack_model=None, max_depth=3, time_limit=None, warm_start_tree=None, verbose=False, cpus=1, record_progress=False):
-        self.attack_model = attack_model
-        self.max_depth = max_depth
-        self.time_limit = time_limit
+        super().__init__(
+            max_depth=max_depth,
+            attack_model=attack_model,
+            time_limit=time_limit,
+            record_progress=record_progress,
+            verbose=verbose,
+        )
+
         self.warm_start_tree = warm_start_tree
-        self.verbose = verbose
         self.cpus = cpus
-        self.record_progress = record_progress
 
-    def __parse_attack_model(self, attack_model):
-        Delta_l = []
-        Delta_r = []
-        for attack in attack_model:
-            if isinstance(attack, Number):
-                Delta_l.append(attack)
-                Delta_r.append(attack)
-            elif isinstance(attack, tuple):
-                Delta_l.append(attack[0])
-                Delta_r.append(attack[1])
-            elif attack == "":
-                Delta_l.append(0)
-                Delta_r.append(0)
-            elif attack == ">":
-                Delta_l.append(0)
-                Delta_r.append(1)
-            elif attack == "<":
-                Delta_l.append(1)
-                Delta_r.append(0)
-            elif attack == "<>":
-                Delta_l.append(1)
-                Delta_r.append(1)
-        return Delta_l, Delta_r
-
-    def fit(self, X, y):
-        """
-        Fit optimal robust decision tree using a MILP solver. MILP formulation
-        closely resembles that of Bertsimas and Dunn (Optimal Decision Trees).
-        """
-        self.n_samples_, self.n_features_ = X.shape
+    def _fit_solver_specific(self, X, y):
         self.majority_class_ = np.argmax(np.bincount(y))
-
-        if self.attack_model is None:
-            self.attack_model = [0.0] * X.shape[1]
         
-        self.Delta_l, self.Delta_r = self.__parse_attack_model(self.attack_model)
-        self.T = (2 ** (self.max_depth + 1)) - 1
-
         self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
         self.V = [self.__determine_V(X[:, i]) for i in range(X.shape[1])]
 
@@ -664,8 +508,8 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
             tree,
             "groot",
             self.attack_model,
-            [True for _ in range(self.n_features_)],
-            [True for _ in range(self.n_features_)],
+            [True for _ in range(self.n_features_in_)],
+            [True for _ in range(self.n_features_in_)],
             False
         )
 
@@ -721,7 +565,7 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
         a_warm = []
         b_warm = []
         for t in T_B:
-            a = [0.0 for _ in range(self.n_features_)]
+            a = [0.0 for _ in range(self.n_features_in_)]
 
             node = nodes[t - 1]
             if node is None:
@@ -758,7 +602,7 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
         return a_warm, b_warm, c_warm, e_warm, s_warm
 
     def __build_model_gurobi(self, X, y):
-        p = self.n_features_
+        p = self.n_features_in_
         n = self.n_samples_
         T_B = range(1, (self.T // 2) + 1)
         T_L = range((self.T // 2) + 1, self.T + 1)
@@ -835,7 +679,7 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
     def __solve_model_gurobi(self, model, variables, warm_start):
         a, b, c, e, s = variables
 
-        p = self.n_features_
+        p = self.n_features_in_
         n = self.n_samples_
         T_B = range(1, (self.T // 2) + 1)
         T_L = range((self.T // 2) + 1, self.T + 1)
@@ -967,83 +811,3 @@ class BinaryOptimalRobustTree(BaseEstimator, ClassifierMixin):
                 A_r.append(t // 2)
             t //= 2
         return A_l, A_r
-
-    def prune(self):
-        bounds = np.tile(np.array([0, 1], dtype=np.float32), (self.n_features_, 1))
-
-        for _ in range(self.max_depth):
-            # Without decision nodes we do not have to prune
-            if self.root_.is_leaf():
-                break
-
-            self.root_ = self.root_.prune(bounds)
-
-    def predict_proba(self, X):
-        """
-        Predict class probabilities of the input samples X.
-
-        The class probability is the fraction of samples of the same class in
-        the leaf.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            The input samples to predict.
-
-        Returns
-        -------
-        proba : array of shape (n_samples,)
-            The probability for each input sample of being malicious.
-        """
-
-        X = check_array(X)
-
-        predictions = []
-        for sample in X:
-            predictions.append(self.root_.predict(sample))
-
-        return np.array(predictions)
-
-    def predict(self, X):
-        """
-        Predict the classes of the input samples X.
-
-        The predicted class is the most frequently occuring class label in a 
-        leaf.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            The input samples to predict.
-
-        Returns
-        -------
-        y : array-like of shape (n_samples,)
-            The predicted class labels
-        """
-
-        return np.argmax(self.predict_proba(X), axis=1)
-
-    def to_string(self):
-        result = ""
-        result += f"Parameters: {self.get_params()}\n"
-
-        if hasattr(self, "root_"):
-            result += f"Tree:\n{self.root_.pretty_print()}"
-        else:
-            result += "Tree has not yet been fitted"
-
-        return result
-
-    def to_xgboost_json(self, output_file="tree.json"):
-        if hasattr(self, "root_"):
-            dictionary, _ = self.root_.to_xgboost_json(0, 0)
-        else:
-            raise Exception("Tree is not yet fitted")
-
-        if output_file is None:
-            return dictionary
-        else:
-            with open(output_file, "w") as fp:
-                # If saving to file then surround dict in list brackets
-                json.dump([dictionary], fp, indent=2, default=convert_numpy)
