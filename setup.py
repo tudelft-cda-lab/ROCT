@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="roct",
-    version="0.0.2",
+    version="0.0.3",
     author="Daniel Vos",
     author_email="D.A.Vos@tudelft.nl",
     url="https://github.com/tudelft-cda-lab/ROCT",
