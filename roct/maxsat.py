@@ -6,7 +6,6 @@ from groot.model import NumericalNode, Node, _TREE_LEAF, _TREE_UNDEFINED
 from groot.adversary import DecisionTreeAdversary
 
 from sklearn.utils import check_random_state
-from sklearn.model_selection import train_test_split
 
 from pysat.examples.rc2 import RC2Stratified
 from pysat.examples.fm import FM
@@ -20,11 +19,11 @@ from threading import Timer
 
 class SATOptimalRobustTree(BaseOptimalRobustTree):
 
-    def __init__(self, attack_model=None, max_depth=3, max_features=None, lsu=False, warm_start_tree=None, warm_start_kind="groot", record_progress=False, cardinality=False, pruning=False, restrict_thresholds=False, rc2=True, add_impossible_combinations=False, lsu_timeout=None, verbose=False, random_state=None):
+    def __init__(self, attack_model=None, max_depth=3, time_limit=None, max_features=None, lsu=False, warm_start_tree=None, warm_start_kind="groot", record_progress=False, rc2=True, add_impossible_combinations=False, verbose=False, random_state=None):
         super().__init__(
             max_depth=max_depth,
             attack_model=attack_model,
-            time_limit=None,
+            time_limit=time_limit,
             record_progress=record_progress,
             verbose=verbose
         )
@@ -34,35 +33,21 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         self.warm_start_tree = warm_start_tree
         self.warm_start_kind = warm_start_kind
         self.record_progress = record_progress
-        self.cardinality = cardinality
-        self.pruning = pruning
-        self.restrict_thresholds = restrict_thresholds
         self.rc2 = rc2
         self.add_impossible_combinations = add_impossible_combinations
         self.random_state = random_state
 
     def _fit_solver_specific(self, X, y):
         """
-        Fit optimal robust decision tree using a SAT solver.
+        Fit optimal robust decision tree using a MaxSAT solver.
         """
         self.random_state_ = check_random_state(self.random_state)
-
-        if self.pruning:
-            X, X_prune, y, y_prune = train_test_split(X, y, stratify=y, test_size=0.1, random_state=self.random_state_)
-
-        if False:
-            X, y, weights = self.__merge_samples(X, y)
-            X_prune, y_prune, prune_weights = self.__merge_samples(X_prune, y_prune)
-        else:
-            weights = np.ones(X.shape[0], dtype=int)
-
-            if self.pruning:
-                prune_weights = np.ones(X_prune.shape[0], dtype=int)
 
         self.n_samples_, self.n_features_in_ = X.shape
 
         self.thresholds = [self.__determine_thresholds(samples, feature) for feature, samples in enumerate(X.T)]
 
+        weights = np.ones(X.shape[0], dtype=int)
         wcnf, variables = self.__build_sat_formula(X, y, weights)
 
         if self.warm_start_tree:
@@ -71,9 +56,6 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
             warm_start = None
 
         model = self.__solve_sat(wcnf, warm_start)
-
-        if self.pruning:
-            model, variables = self.__prune_model(model, X_prune, y_prune, prune_weights, variables)
 
         self.__build_tree(model, variables)
 
@@ -213,19 +195,11 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
 
         return warm_start
 
-
-    def __merge_samples(self, X, y):
-        X, indices, weights = np.unique(X, return_index=True, return_counts=True, axis=0)
-        print(f"Removed {len(y) - len(X)} samples out of {len(y)}")
-        return X, y[indices], weights
-
     def __build_sat_formula(self, X, y, weights=None):
         n, p = X.shape
         T_B = range(self.T // 2)
         T_L = range(self.T // 2, self.T)
         n_thresholds = max(len(ts) for ts in self.thresholds)
-        Delta_l = self.Delta_l
-        Delta_r = self.Delta_r
 
         # Create boolean variables
         counter = 0
@@ -236,28 +210,21 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
         s = np.array([[[counter := counter + 1 for side in range(2)] for m in T_B] for i in range(n)]).astype(object)
 
         # Only one feature may be chosen in each node
-        if self.cardinality:
-            wcnf = WCNFPlus()
-            for m in T_B:
-                lits = list(a[:, m])
-                wcnf.append(lits)
-                wcnf.append([lits, 1], is_atmost=True)
+        if self.rc2:
+            wcnf = WCNF()
         else:
-            if self.rc2:
-                wcnf = WCNF()
-            else:
-                wcnf = WCNFPlus()
+            wcnf = WCNFPlus()
 
-            if self.max_features is None:
-                max_features_ = self.n_features_in_
-            elif self.max_features == "sqrt":
-                max_features_ = max(1, int(np.sqrt(self.n_features_in_)))
-            else:
-                raise Exception("Can only use values None or 'sqrt' for max_features, not " + self.max_features)
+        if self.max_features is None:
+            max_features_ = self.n_features_in_
+        elif self.max_features == "sqrt":
+            max_features_ = max(1, int(np.sqrt(self.n_features_in_)))
+        else:
+            raise Exception("Can only use values None or 'sqrt' for max_features, not " + self.max_features)
 
-            for m in T_B:
-                available_features = self.random_state_.choice(a[:, m], max_features_, replace=False)
-                wcnf.append(list(available_features))
+        for m in T_B:
+            available_features = self.random_state_.choice(a[:, m], max_features_, replace=False)
+            wcnf.append(list(available_features))
 
         # The thresholds have order b_{i} <= b_{i+1}
         for m in T_B:
@@ -281,36 +248,7 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
                     l = self.__rightmost_threshold_left(thresholds_feature, X[i, j], delta_r)
                     wcnf.append([-a[j, m], -b[l, m], s[i, m, 1]])
 
-        if self.restrict_thresholds:
-            for m in T_B:
-                # Skip root node
-                if m == 0:
-                    continue
-
-                A_l, A_r = self.__ancestors(m + 1)
-
-                for j in range(p):
-                    delta_l = self.Delta_l[j]
-                    delta_r = self.Delta_r[j]
-                    thresholds = self.thresholds[j]
-
-                    for ts_i, threshold in enumerate(thresholds):
-                        # Skip leftmost threshold
-                        if ts_i == 0:
-                            continue
-
-                        threshold_samples = np.where(((X[:, j] - delta_l) == threshold) | ((X[:, j] + delta_r) == threshold))[0]
-
-                        clause = [-b[ts_i, m], -a[j, m]]
-                        for i in threshold_samples:
-                            for other_m in A_l:
-                                clause.append(s[i, other_m - 1, 0])
-                            for other_m in A_r:
-                                clause.append(s[i, other_m - 1, 1])
-                        wcnf.append(clause)
-                        print(f"-b[{ts_i}, {m}], -a[{j}, {m}], s[{threshold_samples}, {A_l}+{A_r}]")
-
-        # # Count an error when a leaf in reach has the wrong label
+        # Count an error when a leaf in reach has the wrong label
         for i in range(n):
             for t in T_L:
                 A_l, A_r = self.__ancestors(t + 1)
@@ -372,24 +310,14 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
                     self.runtimes_ = solver.runtimes_
                     self.upper_bounds_ = solver.upper_bounds_
         else:
-            if self.cardinality:
-                if self.rc2:
-                    with RC2Stratified(wcnf, solver="minicard", adapt=True, exhaust=True, minz=True, verbose=self.verbose) as solver:
-                        model = solver.compute()
-                        self.optimal_ = model is not None
-                else:
-                    with FM(wcnf, solver="minicard", enc=9, verbose=self.verbose) as solver:
-                        solver.compute()
-                        model = solver.model
+            if self.rc2:
+                with RC2Stratified(wcnf, solver="g4", incr=True, adapt=False, exhaust=True, minz=True, verbose=int(self.verbose) * 10) as solver:
+                    model = solver.compute()
+                    self.optimal_ = model is not None
             else:
-                if self.rc2:
-                    with RC2Stratified(wcnf, solver="g4", incr=True, adapt=False, exhaust=True, minz=True, verbose=int(self.verbose) * 10) as solver:
-                        model = solver.compute()
-                        self.optimal_ = model is not None
-                else:
-                    with FM(wcnf, solver="g4", enc=3, verbose=self.verbose) as solver:
-                        solver.compute()
-                        model = solver.model
+                with FM(wcnf, solver="g4", enc=3, verbose=self.verbose) as solver:
+                    solver.compute()
+                    model = solver.model
             
 
             if model is None:
@@ -487,31 +415,6 @@ class SATOptimalRobustTree(BaseOptimalRobustTree):
             node.right_child = nodes[t * 2]
 
         self.root_ = nodes[0]
-
-    def __prune_model(self, model, X_prune, y_prune, prune_weights, variables):
-        a, b, c, e, s, X, y = variables
-
-        p = self.n_features_in_
-        T_B = range(self.T // 2)
-
-        wcnf, prune_variables = self.__build_sat_formula(X_prune, y_prune, prune_weights)
-
-        for m in T_B:
-            for j in range(p):
-                if a[j, m] in model:
-                    wcnf.append([a[j, m]])
-                    feature = j
-                else:
-                    wcnf.append([-a[j, m]])
-            
-            for ts in range(len(self.thresholds[feature])):
-                if b[ts, m] in model:
-                    wcnf.append([b[ts, m]])
-                else:
-                    wcnf.append([-b[ts, m]])
-
-        prune_model = self.__solve_sat(wcnf, None)
-        return prune_model, (*variables[:2], prune_variables[2], *variables[3:])
 
     def __determine_thresholds(self, samples, feature):
         delta_l = self.Delta_l[feature]

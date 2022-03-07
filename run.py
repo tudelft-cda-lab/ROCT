@@ -84,7 +84,7 @@ def fit_treant(depth, X, y):
 def fit_maxsat_lsu(depth, X, y):
     attack_model = [args.epsilon] * X.shape[1]
     tree = SATOptimalRobustTree(
-        max_depth=depth, attack_model=attack_model, lsu=True, lsu_timeout=args.timeout
+        max_depth=depth, attack_model=attack_model, lsu=True, time_limit=args.timeout
     )
     tree.fit(X, y)
     return Model.from_groot(tree), tree.optimal_

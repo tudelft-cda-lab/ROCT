@@ -185,7 +185,7 @@ else:
             max_depth=depth,
             record_progress=True,
             lsu=True,
-            lsu_timeout=time_limit,
+            time_limit=time_limit,
         )
         tree.fit(X_train, y_train)
         lsu_sat_runtimes.append([0.0] + tree.runtimes_ + [max(time_limit, tree.runtimes_[-1])])
